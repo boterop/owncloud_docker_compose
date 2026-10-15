@@ -1,0 +1,48 @@
+services:
+  nats:
+    image: nats:latest
+    container_name: nats
+    volumes:
+      - /mnt/owncloud-data/nats:/data
+      - ./nats.conf:/etc/nats/nats.conf:ro
+    command: ["-c", "/etc/nats/nats.conf"]
+    restart: unless-stopped
+  tika:
+    image: apache/tika:latest-full
+    container_name: tika
+    restart: always
+    logging:
+      driver: local
+  ocis:
+    container_name: ocis
+    image: owncloud/ocis
+    user: "1000:1000"
+    ports:
+      - "9200:9200"
+    environment:
+      - OCIS_LOG_LEVEL=error
+      - IDM_CREATE_DEMO_USERS=false
+      - DIM_DOMAIN=boterop.com
+      - PROXY_HTTP_ADDR=0.0.0.0:9200
+      - OCIS_URL=https://drive.boterop.com
+      - OCIS_INSECURE=true
+
+      - OCIS_EVENTS_ENDPOINT=nats:4222
+      - OCIS_EVENTS_CLUSTER=ocis-cluster
+      - OCIS_EVENTS_ENABLE_TLS=false
+
+      - MICRO_REGISTRY=nats-js-kv
+      - MICRO_REGISTRY_ADDRESS=nats:4222
+
+      - SEARCH_EXTRACTOR_TYPE=tika
+      - SEARCH_EXTRACTOR_TIKA_TIKA_URL=http://tika:9998
+      - FRONTEND_FULL_TEXT_SEARCH_ENABLED=true
+    volumes:
+      - /mnt/owncloud-data/config:/etc/ocis
+      - /mnt/owncloud-data/data:/var/lib/ocis
+    depends_on:
+      tika:
+        condition: service_started
+      nats:
+        condition: service_started
+    restart: unless-stopped
