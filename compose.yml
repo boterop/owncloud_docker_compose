@@ -2,17 +2,24 @@ services:
   nats:
     image: nats:latest
     container_name: nats
+    command: ["-js"]
     volumes:
       - /mnt/owncloud-data/nats:/data
-      - ./nats.conf:/etc/nats/nats.conf:ro
-    command: ["-c", "/etc/nats/nats.conf"]
-    restart: unless-stopped
+    logging:
+      driver: ${LOG_DRIVER:-local}
+    restart: always
   tika:
     image: apache/tika:latest-full
     container_name: tika
     restart: always
     logging:
       driver: local
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9998/version"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
   ocis:
     container_name: ocis
     image: owncloud/ocis
@@ -27,12 +34,16 @@ services:
       - OCIS_URL=https://drive.boterop.com
       - OCIS_INSECURE=true
 
+      - OCIS_EXCLUDE_RUN_SERVICES=nats
       - OCIS_EVENTS_ENDPOINT=nats:4222
       - OCIS_EVENTS_CLUSTER=ocis-cluster
       - OCIS_EVENTS_ENABLE_TLS=false
-
       - MICRO_REGISTRY=nats-js-kv
       - MICRO_REGISTRY_ADDRESS=nats:4222
+      - OCIS_PERSISTENT_STORE_NODES=nats:4222
+      - OCIS_CACHE_STORE_NODES=nats:4222
+      - NATS_NATS_HOST=nats
+      - NATS_NATS_PORT=4222
 
       - SEARCH_EXTRACTOR_TYPE=tika
       - SEARCH_EXTRACTOR_TIKA_TIKA_URL=http://tika:9998
@@ -42,7 +53,7 @@ services:
       - /mnt/owncloud-data/data:/var/lib/ocis
     depends_on:
       tika:
-        condition: service_started
+        condition: service_healthy
       nats:
         condition: service_started
     restart: unless-stopped
